@@ -3,6 +3,7 @@ import { onMounted } from 'vue';
 import MapView from './components/MapView.vue';
 import TerrainProfile from './components/TerrainProfile.vue';
 import FlightStats from './components/FlightStats.vue';
+import TemplateLibrary from './components/TemplateLibrary.vue';
 import { useDroneStore } from './store/drone';
 
 const store = useDroneStore();
@@ -116,6 +117,9 @@ function handlePlanRoute() {
             🗑 清除航线
           </button>
         </div>
+
+        <!-- Template Library -->
+        <TemplateLibrary />
 
         <!-- Flight stats -->
         <FlightStats />

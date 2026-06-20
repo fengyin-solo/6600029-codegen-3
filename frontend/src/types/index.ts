@@ -37,3 +37,17 @@ export interface DroneConfig {
   consumptionRate: number;  // mAh/min
   safeDistance: number;     // meters from obstacles
 }
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category: 'power' | 'agriculture' | 'survey' | 'security' | 'other';
+  waypoints: Waypoint[];
+  droneConfig: DroneConfig;
+  selectedAlgorithm: 'astar' | 'rrt';
+  defaultAltitude: number;
+  defaultSpeed: number;
+  createdAt: number;
+  updatedAt: number;
+}

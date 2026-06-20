@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
-import type { Waypoint, NoFlyZone, TerrainPoint, FlightPlan, DroneConfig } from '../types';
+import { ref, computed, watch } from 'vue';
+import type { Waypoint, NoFlyZone, TerrainPoint, FlightPlan, DroneConfig, TaskTemplate } from '../types';
 import {
   aStarPathfind,
   rrtPathfind,
@@ -12,6 +12,26 @@ import {
   mockTerrainData,
 } from '../utils/pathfinding';
 
+const TEMPLATE_STORAGE_KEY = 'drone-task-templates';
+
+function loadTemplatesFromStorage(): TaskTemplate[] {
+  try {
+    const raw = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveTemplatesToStorage(templates: TaskTemplate[]) {
+  try {
+    localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+  } catch {
+    // ignore
+  }
+}
+
 export const useDroneStore = defineStore('drone', () => {
   const waypoints = ref<Waypoint[]>([]);
   const noFlyZones = ref<NoFlyZone[]>([]);
@@ -21,6 +41,7 @@ export const useDroneStore = defineStore('drone', () => {
   const isSimulating = ref(false);
   const simProgress = ref(0);
   const mapCenter = ref<[number, number]>([39.9, 116.4]);
+  const taskTemplates = ref<TaskTemplate[]>(loadTemplatesFromStorage());
 
   const droneConfig = ref<DroneConfig>({
     maxAltitude: 500,
@@ -108,6 +129,60 @@ export const useDroneStore = defineStore('drone', () => {
     return exportKML(currentPlan.value);
   }
 
+  watch(taskTemplates, (val) => {
+    saveTemplatesToStorage(val);
+  }, { deep: true });
+
+  // ─── Template Management ──────────────────────────────────────────────────
+  function saveTemplate(name: string, description?: string, category: TaskTemplate['category'] = 'other') {
+    const now = Date.now();
+    const template: TaskTemplate = {
+      id: `tpl-${now}-${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      description,
+      category,
+      waypoints: JSON.parse(JSON.stringify(waypoints.value)),
+      droneConfig: { ...droneConfig.value },
+      selectedAlgorithm: selectedAlgorithm.value,
+      defaultAltitude: waypoints.value.length > 0 ? waypoints.value[0].altitude : 100,
+      defaultSpeed: waypoints.value.length > 0 ? waypoints.value[0].speed : 10,
+      createdAt: now,
+      updatedAt: now,
+    };
+    taskTemplates.value.push(template);
+    return template.id;
+  }
+
+  function updateTemplate(id: string, updates: Partial<Omit<TaskTemplate, 'id' | 'createdAt'>>) {
+    const tpl = taskTemplates.value.find((t) => t.id === id);
+    if (tpl) {
+      Object.assign(tpl, updates, { updatedAt: Date.now() });
+    }
+  }
+
+  function deleteTemplate(id: string) {
+    taskTemplates.value = taskTemplates.value.filter((t) => t.id !== id);
+  }
+
+  function loadTemplate(id: string): boolean {
+    const tpl = taskTemplates.value.find((t) => t.id === id);
+    if (!tpl) return false;
+    waypoints.value = JSON.parse(JSON.stringify(tpl.waypoints));
+    droneConfig.value = { ...tpl.droneConfig };
+    selectedAlgorithm.value = tpl.selectedAlgorithm;
+    if (waypoints.value.length >= 2) {
+      updatePlan();
+    }
+    return true;
+  }
+
+  function getTemplatesByCategory(category?: TaskTemplate['category']): TaskTemplate[] {
+    if (!category) return [...taskTemplates.value].sort((a, b) => b.updatedAt - a.updatedAt);
+    return taskTemplates.value
+      .filter((t) => t.category === category)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
   // ─── Computed ─────────────────────────────────────────────────────────────
   const totalDistance = computed(() => {
     if (!currentPlan.value) return 0;
@@ -156,6 +231,7 @@ export const useDroneStore = defineStore('drone', () => {
     isSimulating,
     simProgress,
     mapCenter,
+    taskTemplates,
     totalDistance,
     estimatedTime,
     batteryPercent,
@@ -169,5 +245,10 @@ export const useDroneStore = defineStore('drone', () => {
     loadMockData,
     exportPlan,
     updatePlan,
+    saveTemplate,
+    updateTemplate,
+    deleteTemplate,
+    loadTemplate,
+    getTemplatesByCategory,
   };
 });
