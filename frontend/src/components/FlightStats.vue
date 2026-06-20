@@ -18,11 +18,13 @@ function batteryColor(pct: number): string {
 function handleExport() {
   const kml = store.exportPlan();
   if (!kml) return;
+  const planName = store.currentPlan?.name || 'flight-plan';
+  const safeName = planName.replace(/[\\/:*?"<>|]/g, '_');
   const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'flight-plan.kml';
+  a.download = `${safeName}.kml`;
   a.click();
   URL.revokeObjectURL(url);
 }

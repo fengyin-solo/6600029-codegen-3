@@ -1,6 +1,7 @@
 package com.drone.service;
 
 import com.drone.model.TaskTemplate;
+import com.drone.model.Waypoint;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -27,7 +28,12 @@ public class TemplateService {
         t1.setDefaultSpeed(8);
         t1.setCreatedAt(now);
         t1.setUpdatedAt(now);
-        t1.setWaypoints(new ArrayList<>());
+        List<Waypoint> wps = new ArrayList<>();
+        wps.add(new Waypoint("wp-0", 39.920, 116.400, 50, 8, "photo"));
+        wps.add(new Waypoint("wp-1", 39.905, 116.410, 50, 8, "photo"));
+        wps.add(new Waypoint("wp-2", 39.890, 116.420, 50, 8, "photo"));
+        wps.add(new Waypoint("wp-3", 39.875, 116.430, 50, 8, "none"));
+        t1.setWaypoints(wps);
         t1.setDroneConfig(new com.drone.model.DroneConfig(500, 20, 5000, 100, 30));
         templates.put(t1.getId(), t1);
     }
@@ -48,11 +54,14 @@ public class TemplateService {
     }
 
     public TaskTemplate createTemplate(TaskTemplate template) {
-        String id = "tpl-" + System.currentTimeMillis() + "-" +
-                UUID.randomUUID().toString().substring(0, 4);
+        String id = template.getId();
+        if (id == null || id.isEmpty()) {
+            id = "tpl-" + System.currentTimeMillis() + "-" +
+                    UUID.randomUUID().toString().substring(0, 4);
+        }
         long now = System.currentTimeMillis();
         template.setId(id);
-        template.setCreatedAt(now);
+        if (template.getCreatedAt() <= 0) template.setCreatedAt(now);
         template.setUpdatedAt(now);
         templates.put(id, template);
         return template;
@@ -67,6 +76,8 @@ public class TemplateService {
         if (updates.getWaypoints() != null) existing.setWaypoints(updates.getWaypoints());
         if (updates.getDroneConfig() != null) existing.setDroneConfig(updates.getDroneConfig());
         if (updates.getSelectedAlgorithm() != null) existing.setSelectedAlgorithm(updates.getSelectedAlgorithm());
+        if (updates.getDefaultAltitude() > 0) existing.setDefaultAltitude(updates.getDefaultAltitude());
+        if (updates.getDefaultSpeed() > 0) existing.setDefaultSpeed(updates.getDefaultSpeed());
         existing.setUpdatedAt(System.currentTimeMillis());
         return Optional.of(existing);
     }

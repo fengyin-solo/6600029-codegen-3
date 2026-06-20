@@ -11,6 +11,12 @@ import {
   mockNoFlyZones,
   mockTerrainData,
 } from '../utils/pathfinding';
+import {
+  fetchTemplatesSafe,
+  createTemplateRemote,
+  updateTemplateRemote,
+  deleteTemplateRemote,
+} from '../api/templates';
 
 const TEMPLATE_STORAGE_KEY = 'drone-task-templates';
 
@@ -42,6 +48,8 @@ export const useDroneStore = defineStore('drone', () => {
   const simProgress = ref(0);
   const mapCenter = ref<[number, number]>([39.9, 116.4]);
   const taskTemplates = ref<TaskTemplate[]>(loadTemplatesFromStorage());
+  const mapFitVersion = ref(0);
+  const templatesSynced = ref(false);
 
   const droneConfig = ref<DroneConfig>({
     maxAltitude: 500,
@@ -86,16 +94,17 @@ export const useDroneStore = defineStore('drone', () => {
   }
 
   function clearRoute() {
+    stopSimulation();
     waypoints.value = [];
     currentPlan.value = null;
     simProgress.value = 0;
   }
 
-  function updatePlan() {
+  function updatePlan(name?: string) {
     const stats = calculateFlightStats(waypoints.value, droneConfig.value);
     currentPlan.value = {
       id: `plan-${Date.now()}`,
-      name: 'Flight Plan',
+      name: name || currentPlan.value?.name || 'Flight Plan',
       waypoints: [...waypoints.value],
       totalDistance: stats.totalDistance,
       estimatedTime: stats.estimatedTime,
@@ -105,6 +114,14 @@ export const useDroneStore = defineStore('drone', () => {
 
   let simInterval: ReturnType<typeof setInterval> | null = null;
 
+  function stopSimulation() {
+    if (simInterval) {
+      clearInterval(simInterval);
+      simInterval = null;
+    }
+    isSimulating.value = false;
+  }
+
   function simulateFlight() {
     if (waypoints.value.length < 2 || isSimulating.value) return;
     isSimulating.value = true;
@@ -113,8 +130,7 @@ export const useDroneStore = defineStore('drone', () => {
       simProgress.value += 1;
       if (simProgress.value >= 100) {
         simProgress.value = 100;
-        isSimulating.value = false;
-        if (simInterval) clearInterval(simInterval);
+        stopSimulation();
       }
     }, 50);
   }
@@ -129,11 +145,28 @@ export const useDroneStore = defineStore('drone', () => {
     return exportKML(currentPlan.value);
   }
 
+  function fitMapToBounds() {
+    mapFitVersion.value++;
+  }
+
   watch(taskTemplates, (val) => {
     saveTemplatesToStorage(val);
   }, { deep: true });
 
   // ─── Template Management ──────────────────────────────────────────────────
+  async function initTemplates() {
+    const remote = await fetchTemplatesSafe();
+    if (remote.length > 0) {
+      const localIds = new Set(taskTemplates.value.map((t) => t.id));
+      for (const t of remote) {
+        if (!localIds.has(t.id)) {
+          taskTemplates.value.push(t);
+        }
+      }
+    }
+    templatesSynced.value = true;
+  }
+
   function saveTemplate(name: string, description?: string, category: TaskTemplate['category'] = 'other') {
     const now = Date.now();
     const template: TaskTemplate = {
@@ -150,6 +183,7 @@ export const useDroneStore = defineStore('drone', () => {
       updatedAt: now,
     };
     taskTemplates.value.push(template);
+    void createTemplateRemote(template);
     return template.id;
   }
 
@@ -157,22 +191,29 @@ export const useDroneStore = defineStore('drone', () => {
     const tpl = taskTemplates.value.find((t) => t.id === id);
     if (tpl) {
       Object.assign(tpl, updates, { updatedAt: Date.now() });
+      void updateTemplateRemote(id, updates);
     }
   }
 
   function deleteTemplate(id: string) {
     taskTemplates.value = taskTemplates.value.filter((t) => t.id !== id);
+    void deleteTemplateRemote(id);
   }
 
   function loadTemplate(id: string): boolean {
     const tpl = taskTemplates.value.find((t) => t.id === id);
     if (!tpl) return false;
+    stopSimulation();
+    simProgress.value = 0;
     waypoints.value = JSON.parse(JSON.stringify(tpl.waypoints));
     droneConfig.value = { ...tpl.droneConfig };
     selectedAlgorithm.value = tpl.selectedAlgorithm;
     if (waypoints.value.length >= 2) {
-      updatePlan();
+      updatePlan(tpl.name);
+    } else {
+      currentPlan.value = null;
     }
+    fitMapToBounds();
     return true;
   }
 
@@ -231,7 +272,9 @@ export const useDroneStore = defineStore('drone', () => {
     isSimulating,
     simProgress,
     mapCenter,
+    mapFitVersion,
     taskTemplates,
+    templatesSynced,
     totalDistance,
     estimatedTime,
     batteryPercent,
@@ -241,10 +284,13 @@ export const useDroneStore = defineStore('drone', () => {
     updateWaypoint,
     planRoute,
     clearRoute,
+    stopSimulation,
     simulateFlight,
     loadMockData,
     exportPlan,
     updatePlan,
+    fitMapToBounds,
+    initTemplates,
     saveTemplate,
     updateTemplate,
     deleteTemplate,

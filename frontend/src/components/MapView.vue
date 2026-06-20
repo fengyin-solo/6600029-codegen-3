@@ -132,13 +132,33 @@ function drawSimDrone() {
   }
 }
 
-watch(() => store.waypoints.length, () => {
-  drawWaypoints();
-  drawRoute();
-});
+function clearDroneMarker() {
+  if (droneMarker && map) {
+    map.removeLayer(droneMarker);
+    droneMarker = null;
+  }
+}
+
+function fitToBounds() {
+  if (!map || store.waypoints.length === 0) return;
+  const latlngs = store.waypoints.map((w) => [w.lat, w.lng] as [number, number]);
+  const bounds = L.latLngBounds(latlngs);
+  map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+}
+
+watch(
+  () => store.waypoints,
+  () => {
+    drawWaypoints();
+    drawRoute();
+    if (!store.isSimulating) clearDroneMarker();
+  },
+  { deep: true }
+);
 
 watch(() => store.noFlyZones.length, drawNoFlyZones);
 watch(() => store.simProgress, drawSimDrone);
+watch(() => store.mapFitVersion, fitToBounds);
 
 onMounted(() => {
   nextTick(initMap);

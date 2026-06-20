@@ -10,6 +10,7 @@ const store = useDroneStore();
 
 onMounted(() => {
   store.loadMockData();
+  void store.initTemplates();
 });
 
 function handlePlanRoute() {
